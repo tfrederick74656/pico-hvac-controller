@@ -50,18 +50,27 @@
 #define GPIO_REFERENCE_STATE true
 #endif
 
+ // Min Runtime - 3 Minutes
 #ifndef COMPRESSOR_MIN_RUNTIME
 #define COMPRESSOR_MIN_RUNTIME 180000
 #endif
 
+// Min Rest Time - 5 Minutes
 #ifndef COMPRESSOR_MIN_OFFTIME
 #define COMPRESSOR_MIN_OFFTIME 300000
 #endif
 
-#ifndef COMPRESSOR_FREEZE_TIME
-#define COMPRESSOR_FREEZE_TIME 600000
+// Delay Freeze Handling - 10 Minutes
+#ifndef COMPRESSOR_FREEZE_DELAY
+#define COMPRESSOR_FREEZE_DELAY 1200000
 #endif
 
+// Freeze Handling Time - 5 Minutes
+#ifndef COMPRESSOR_FREEZE_TIME
+#define COMPRESSOR_FREEZE_TIME 300000
+#endif
+
+// GPIO Polling Rate
 #ifndef SAMPLE_RATE
 #define SAMPLE_RATE 1000
 #endif
@@ -127,7 +136,7 @@ void blink_message(int message) {
         pico_blink_led(100, 100);
         break;
     case 3:
-        for (size_t i = 0; i < 5; i++){
+        for (int i = 0; i < 5; i++){
             pico_blink_led(100, 100);
         }
         break;
@@ -137,12 +146,12 @@ void blink_message(int message) {
 }
 
 // Compressor Startup Routine
-void compressor_startup() {
+void compressor_startup(int time) {
     // Turn compressor and fan on
     pico_set_output(GPIO_COMPRESSOR, ON);
     pico_set_output(GPIO_FAN, ON);
-    // Run compressor and fan for COMPRESSOR_MIN_RUNTIME
-    sleep_ms(COMPRESSOR_MIN_RUNTIME);
+    // Run compressor and fan
+    sleep_ms(time);
 }
 
 // Compressor Shutdown Routine
@@ -175,26 +184,60 @@ int main() {
     bool cool_mode = false;
     bool cool_call = false;
     bool freeze_in = false;
-    
+    bool freeze_mode = false;
+
     // Main HVAC Monitoring Loop
     while (true) {
         //blink_message(2);
         cool_call = gpio_get(GPIO_COOL);
         freeze_in = gpio_get(GPIO_FREEZE);
 
+        // The freeze stat input is triggered
         if(freeze_in){
             blink_message(1);
-            compressor_shutdown(COMPRESSOR_FREEZE_TIME);
+            bool starting_cool_call = cool_call;
+            // A low temperature event can trigger some time before icing actually obstructs airflow
+            // To maximize compressor runtime during this period, delay executing the compressor shutdown for some time
+            // If the freeze stat is still triggered after one iteration, skip this delay period
+            if(!freeze_mode) {
+                for(int i=0; i<COMPRESSOR_FREEZE_DELAY/SAMPLE_RATE; i++) {
+                    sleep_ms(SAMPLE_RATE);
+                    // Check if the cooling call state changes during this delay period
+                    // If it does, abandon the delay and skip right to the normal compressor shutdown routine
+                    if(starting_cool_call != gpio_get(GPIO_COOL)) {
+                        break;
+                    }
+                }
+            }
+
+            // Turn compressor off
+            pico_set_output(GPIO_COMPRESSOR, OFF);
+            // Turn fan on
+            pico_set_output(GPIO_FAN, ON);
+
+            // Wait until the freeze stat indicates a thawed state
+            blink_message(0);
+            while(gpio_get(GPIO_FREEZE)) {
+                blink_message(2);
+                sleep_ms(SAMPLE_RATE);
+            }
+            blink_message(1);
+            
+            // Turn fan off
+            pico_set_output(GPIO_FAN, OFF);
+            
             cool_mode = false;
+            freeze_mode = true;
             blink_message(0);
         } else {
+            freeze_mode = false;
             if(cool_call == cool_mode) {
                 // Call State Matches Current Mode
                 sleep_ms(SAMPLE_RATE);
             } else if (cool_call && !cool_mode) {
                 // Cooling Requested, Not Currently Cooling
                 blink_message(1);
-                compressor_startup();
+                compressor_startup(COMPRESSOR_MIN_RUNTIME);
                 cool_mode = true;
                 blink_message(0);
             } else {
