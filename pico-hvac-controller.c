@@ -60,9 +60,9 @@
 #define COMPRESSOR_MIN_OFFTIME 300000
 #endif
 
-// Delay Freeze Handling - 10 Minutes
+// Delay Freeze Handling - 30 Minutes
 #ifndef COMPRESSOR_FREEZE_DELAY
-#define COMPRESSOR_FREEZE_DELAY 1200000
+#define COMPRESSOR_FREEZE_DELAY 1800000
 #endif
 
 // Freeze Handling Time - 5 Minutes
@@ -184,7 +184,6 @@ int main() {
     bool cool_mode = false;
     bool cool_call = false;
     bool freeze_in = false;
-    bool freeze_mode = false;
 
     // Main HVAC Monitoring Loop
     while (true) {
@@ -198,12 +197,12 @@ int main() {
             bool starting_cool_call = cool_call;
             // A low temperature event can trigger some time before icing actually obstructs airflow
             // To maximize compressor runtime during this period, delay executing the compressor shutdown for some time
-            // If the freeze stat is still triggered after one iteration, skip this delay period
-            if(!freeze_mode) {
+            // Don't bother running if the system isn't calling for cooling
+            if(cool_call){
                 for(int i=0; i<COMPRESSOR_FREEZE_DELAY/SAMPLE_RATE; i++) {
                     sleep_ms(SAMPLE_RATE);
                     // Check if the cooling call state changes during this delay period
-                    // If it does, abandon the delay and skip right to the normal compressor shutdown routine
+                    // If it does, abandon the delay and skip right to the thaw routine
                     if(starting_cool_call != gpio_get(GPIO_COOL)) {
                         break;
                     }
@@ -216,21 +215,16 @@ int main() {
             pico_set_output(GPIO_FAN, ON);
 
             // Wait until the freeze stat indicates a thawed state
-            blink_message(0);
             while(gpio_get(GPIO_FREEZE)) {
-                blink_message(2);
                 sleep_ms(SAMPLE_RATE);
             }
-            blink_message(1);
             
             // Turn fan off
             pico_set_output(GPIO_FAN, OFF);
             
             cool_mode = false;
-            freeze_mode = true;
             blink_message(0);
         } else {
-            freeze_mode = false;
             if(cool_call == cool_mode) {
                 // Call State Matches Current Mode
                 sleep_ms(SAMPLE_RATE);

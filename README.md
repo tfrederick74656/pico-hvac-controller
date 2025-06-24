@@ -42,6 +42,8 @@ Proper details on the hardware configuration are coming soon. In the meantime, t
 
 ## Version History
 
+* 1.3.1
+    * Simplify freeze stat handling logic
 * 1.2.1
     * Add support for delayed freeze stat handling
 * 1.0.0
