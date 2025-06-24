@@ -60,14 +60,9 @@
 #define COMPRESSOR_MIN_OFFTIME 300000
 #endif
 
-// Delay Freeze Handling - 30 Minutes
+// Delay Freeze Handling - 60 Minutes
 #ifndef COMPRESSOR_FREEZE_DELAY
-#define COMPRESSOR_FREEZE_DELAY 1800000
-#endif
-
-// Freeze Handling Time - 5 Minutes
-#ifndef COMPRESSOR_FREEZE_TIME
-#define COMPRESSOR_FREEZE_TIME 300000
+#define COMPRESSOR_FREEZE_DELAY 3600000
 #endif
 
 // GPIO Polling Rate
